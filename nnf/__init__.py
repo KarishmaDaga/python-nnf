@@ -595,6 +595,7 @@ class NNF(metaclass=abc.ABCMeta):
                     # where C can be Var or Or
                     elif any([isinstance(child, And) for child in node.children]):
 
+                        # TODO: simplify recursive steps
                         if isinstance(left, And):
                             clause1, clause2 = left.children
                             distributed_left = Or({distribute(clause1), distribute(right)})
@@ -612,6 +613,8 @@ class NNF(metaclass=abc.ABCMeta):
                     # Or(Or(A, B), Or(D, C))
                     else:
                         return Or({distribute(left), distribute(right)})
+                else:
+                    raise TypeError(node)
 
         def merge_cnf(left: NNF, right: NNF) -> 'And[Or[Var]]':
             
