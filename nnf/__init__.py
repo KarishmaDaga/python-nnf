@@ -598,17 +598,11 @@ class NNF(metaclass=abc.ABCMeta):
                         # TODO: simplify recursive steps
                         if isinstance(left, And):
                             clause1, clause2 = left.children
-                            distributed_left = Or({distribute(clause1), distribute(right)})
-                            distributed_right = Or({distribute(clause2), distribute(right)})
-
-                            return And({distribute(distributed_left), distribute(distributed_right)})
+                            return And({distribute(Or({clause1, right})), distribute(Or({clause2, right}))})
 
                         else:
                             clause1, clause2 = right.children
-                            distributed_left = Or({distribute(clause1), distribute(left)})
-                            distributed_right = Or({distribute(clause2), distribute(left)})
-
-                            return And({distribute(distributed_left), distribute(distributed_right)})
+                            return And({distribute(Or({clause1, left})), distribute(Or({clause2, left}))})
 
                     # Or(Or(A, B), Or(D, C))
                     else:
