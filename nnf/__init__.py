@@ -611,7 +611,6 @@ class NNF(metaclass=abc.ABCMeta):
 
                     # Or(Or(A, B), Or(D, C))
                     else:
-                        left, right = node.children
                         return Or({distribute(left), distribute(right)})
 
         def merge_cnf(left: NNF, right: NNF) -> 'And[Or[Var]]':
