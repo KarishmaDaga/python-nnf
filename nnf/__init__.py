@@ -567,38 +567,26 @@ class NNF(metaclass=abc.ABCMeta):
 
         setattr(cls, '__iter__', __iter__)
         setattr(cls, '__next__', __next__)
-        setattr(cls, '__len__', __len__)        
-
-    def distribute(self, clause1, clause2):
-        # TODO: reduce(func, iterable) -> return set of clauses with Or distributed
-        # {Or({}), ..., Or({})}
-        # func distributes Or and accumulates clauses
-
-        # product(c1, c2) -> [(tuples)]. We need to handle the tuples
-        # when converting into nnf clauses
-        pass
+        setattr(cls, '__len__', __len__)
 
 
     def to_naive_CNF(self):
         ''' Convert given NNF to CNF using naive algorithm and no additional variables'''
-        from functools import reduce
         from itertools import product
 
-        # TODO: change this later?
+        # TODO: clean this later
         self.to_iterable(Var)
 
         if isinstance(self, Var):
             return self
         
         assert isinstance(self, Internal)
-        
+
         cnf_children = {c.to_naive_CNF() for c in self.children}
 
         if isinstance(self, Or):
             if any(isinstance(child, And) for child in cnf_children):
-                # TODO: create function 'distribute' to use in reduce(func, iterable)
-                # because tuples in the return are messing with nnf clause creation
-                #pairs = set(reduce(lambda c1, c2: product(c1, c2), cnf_children))
+                # TODO: clean this
                 pairs = set(product(*cnf_children))
                 clauses = set(map(lambda *args: Or(*args).simplify(), pairs))
                 self = And(clauses)
