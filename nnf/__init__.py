@@ -570,7 +570,7 @@ class NNF(metaclass=abc.ABCMeta):
         setattr(cls, '__len__', __len__)
 
 
-    def to_naive_CNF(self) -> 'NNF':
+    def to_CNF_naive(self) -> 'And[Or[Var]]':
         """ Convert given NNF to naive CNF with no additional variables """
         from itertools import product
 
@@ -583,26 +583,25 @@ class NNF(metaclass=abc.ABCMeta):
         
         assert isinstance(self, Internal)
 
-        cnf_children = {c.to_naive_CNF() for c in self.children}
+        cnf_children = {c.to_CNF_naive() for c in self.children}
 
         if isinstance(self, Or):
             # distribute Ors over Ands
             if any(isinstance(child, And) for child in cnf_children):
-                clauses = set(map(lambda child: Or(child).simplify(), product(*cnf_children)))
-                self = And(clauses)
+                clauses = set(map(lambda *child: Or(*child).simplify(), product(*cnf_children)))
+                return And(clauses)
             else:
-                self = self.simplify()
-            return self
+                return self.simplify()
 
         elif isinstance(self, And):
-            return And(cnf_children)
+            return self.simplify()
         
         else:
             raise TypeError(self)
 
-    def to_CNF(self, demorgan=False) -> 'And[Or[Var]]':
+    def to_CNF(self, naive=False) -> 'And[Or[Var]]':
         """Compile theory to a semantically equivalent CNF formula."""
-        return tseitin.to_CNF(self) if not demorgan else self.to_naive_CNF()
+        return tseitin.to_CNF(self) if not naive else self.to_CNF_naive()
 
     def _cnf_satisfiable(self) -> bool:
         """Call a SAT solver on the presumed CNF theory."""
