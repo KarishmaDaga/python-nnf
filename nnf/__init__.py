@@ -554,120 +554,64 @@ class NNF(metaclass=abc.ABCMeta):
 
         return neg(self)
 
+    def to_iterable(self, cls):
+        ''' converts Var class to an iterable for CNF conversion '''
+        def __iter__(self):
+            return iter({self})
 
-    def _to_naive_CNF(self) -> 'And[Or[Var]]':
+        def __next__(self):
+            raise StopIteration
 
-        def distribute(node):
-            
-            if isinstance(node, Var):
-                return node
+        def __len__(self):
+            return 1
 
-            elif isinstance(node, And):
-                
-                # And(Var(A), Var(B)) -> And(Var(A), Var(B))
-                if all([isinstance(child, Var) for child in node.children]):
-                    return node
+        setattr(cls, '__iter__', __iter__)
+        setattr(cls, '__next__', __next__)
+        setattr(cls, '__len__', __len__)        
 
-                else:
-                    left, right = node.children
-                    return And({distribute(left), distribute(right)})
+    def distribute(self, clause1, clause2):
+        # TODO: reduce(func, iterable) -> return set of clauses with Or distributed
+        # {Or({}), ..., Or({})}
+        # func distributes Or and accumulates clauses
 
-            elif isinstance(node, Or):
-
-                # Or(Var(A), Var(B)) -> Or(Var(A), Var(B))
-                if all([isinstance(child, Var) for child in node.children]):
-                    return node
-                
-                else:
-                    left, right = node.children
-
-                    # Or(And(A,B), And(C, D)) -> And(Or(A,C), Or(A,D), Or(B,C), Or(B,D))
-                    if all([isinstance(child, And) for child in node.children]):
-                        res = []
-
-                        for c in left.children:
-                            for d in right.children:
-                                res.append(Or({c, d}))
-                        return And(res)
-
-                    # Either Or(And(A,B), C) -> And(Or(A,C), Or(B,C))
-                    # or Or(C, And(A,B)) -> And(Or(C,B), Or(A,C))
-                    # where C can be Var or Or
-                    elif any([isinstance(child, And) for child in node.children]):
-
-                        # TODO: simplify recursive steps
-                        if isinstance(left, And):
-                            clause1, clause2 = left.children
-                            return And({distribute(Or({clause1, right})), distribute(Or({clause2, right}))})
-
-                        else:
-                            clause1, clause2 = right.children
-                            return And({distribute(Or({clause1, left})), distribute(Or({clause2, left}))})
-
-                    # Or(Or(A, B), Or(D, C))
-                    else:
-                        return Or({distribute(left), distribute(right)})
-            else:
-                raise TypeError(node)
-
-        def merge_cnf(left: NNF, right: NNF) -> 'And[Or[Var]]':
-            
-            res = []
-            left_clauses = [left] if isinstance(left, Var) else [clause for clause in left.children]
-            right_clauses = [right] if isinstance(right, Var) else [clause for clause in right.children]
-
-            if len(left_clauses) > len(right_clauses):
-                for index, clause in enumerate(left_clauses):
-                    res.append((clause, right_clauses[index % len(right_clauses)]))
-            else:
-                for index, clause in enumerate(right_clauses):
-                    res.append((clause, left_clauses[index % len(left_clauses)]))
-            
-            return And(res)
+        # product(c1, c2) -> [(tuples)]. We need to handle the tuples
+        # when converting into nnf clauses
+        pass
 
 
-        def process_theory(node: NNF) -> 'And[Or[Var]]':
+    def to_naive_CNF(self):
+        ''' Convert given NNF to CNF using naive algorithm and no additional variables'''
+        from functools import reduce
+        from itertools import product
 
-            if node.is_CNF():
-                return node
+        # TODO: change this later?
+        self.to_iterable(Var)
 
-            res = []
+        if isinstance(self, Var):
+            return self
+        
+        assert isinstance(self, Internal)
+        
+        cnf_children = {c.to_naive_CNF() for c in self.children}
 
-            if isinstance(node, Var):
-                res.append(node)
+        if isinstance(self, Or):
+            if any(isinstance(child, And) for child in cnf_children):
+                # TODO: create function 'distribute' to use in reduce(func, iterable)
+                # because tuples in the return are messing with nnf clause creation
+                pairs = set(reduce(lambda c1, c2: product(c1, c2), cnf_children))
+                clauses = set(map(lambda *args: Or(*args), pairs))
+                self = And(clauses)
+            return self
 
-            assert isinstance(node, Internal)
-
-            if len(node.children) == 1:
-                [child] = node.children
-                res.append(process_node(child))
-            
-            else:
-
-                left, right = node.children
-
-                if isinstance(node, And):
-                    left_to_cnf = distribute(left)
-                    right_to_cnf = distribute(right)
-                    return And({left_to_cnf, right_to_cnf})
-                
-                elif isinstance(node, Or):
-                    left_to_cnf = distribute(left)
-                    right_to_cnf = distribute(right)
-                    return merge_cnf(left_to_cnf, right_to_cnf)
-
-            return res
-
-        res = process_theory(self)
-        NNF._is_CNF_loose.set(res, True)
-        NNF._is_CNF_strict.set(res, True)
-        return res
+        elif isinstance(self, And):
+            return And(cnf_children)
+        
+        else:
+            raise TypeError(self)
 
     def to_CNF(self, demorgan=False) -> 'And[Or[Var]]':
         """Compile theory to a semantically equivalent CNF formula."""
-        if demorgan:
-            return self._to_naive_CNF()
-        return tseitin.to_CNF(self)
+        return tseitin.to_CNF(self) if not demorgan else self.to_naive_CNF()
 
     def _cnf_satisfiable(self) -> bool:
         """Call a SAT solver on the presumed CNF theory."""
