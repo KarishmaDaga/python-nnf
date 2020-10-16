@@ -554,8 +554,8 @@ class NNF(metaclass=abc.ABCMeta):
 
         return neg(self)
 
-    def to_iterable(self, cls):
-        ''' converts Var class to an iterable for CNF conversion '''
+    def _to_iterable(self, cls) -> None:
+        """ Adds magic methods to nnf.Var to make it iterable for CNF conversion """
         def __iter__(self):
             return iter({self})
 
@@ -570,12 +570,13 @@ class NNF(metaclass=abc.ABCMeta):
         setattr(cls, '__len__', __len__)
 
 
-    def to_naive_CNF(self):
-        ''' Convert given NNF to CNF using naive algorithm and no additional variables'''
+    def to_naive_CNF(self) -> 'NNF':
+        """ Convert given NNF to naive CNF with no additional variables """
         from itertools import product
 
-        # TODO: clean this later
-        self.to_iterable(Var)
+        # add magic methods to class Var to make it iterable
+        # for lambda functions and itertools.product 
+        self._to_iterable(Var)
 
         if isinstance(self, Var):
             return self
@@ -585,11 +586,12 @@ class NNF(metaclass=abc.ABCMeta):
         cnf_children = {c.to_naive_CNF() for c in self.children}
 
         if isinstance(self, Or):
+            # distribute Ors over Ands
             if any(isinstance(child, And) for child in cnf_children):
-                # TODO: clean this
-                pairs = set(product(*cnf_children))
-                clauses = set(map(lambda *args: Or(*args).simplify(), pairs))
+                clauses = set(map(lambda *child: Or(*child).simplify(), product(*cnf_children)))
                 self = And(clauses)
+            else:
+                self = self.simplify()
             return self
 
         elif isinstance(self, And):
