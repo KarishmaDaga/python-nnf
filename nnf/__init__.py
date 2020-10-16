@@ -598,8 +598,9 @@ class NNF(metaclass=abc.ABCMeta):
             if any(isinstance(child, And) for child in cnf_children):
                 # TODO: create function 'distribute' to use in reduce(func, iterable)
                 # because tuples in the return are messing with nnf clause creation
-                pairs = set(reduce(lambda c1, c2: product(c1, c2), cnf_children))
-                clauses = set(map(lambda *args: Or(*args), pairs))
+                #pairs = set(reduce(lambda c1, c2: product(c1, c2), cnf_children))
+                pairs = set(product(*cnf_children))
+                clauses = set(map(lambda *args: Or(*args).simplify(), pairs))
                 self = And(clauses)
             return self
 
