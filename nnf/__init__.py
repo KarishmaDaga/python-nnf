@@ -588,7 +588,7 @@ class NNF(metaclass=abc.ABCMeta):
         if isinstance(self, Or):
             # distribute Ors over Ands
             if any(isinstance(child, And) for child in cnf_children):
-                clauses = set(map(lambda *child: Or(*child).simplify(), product(*cnf_children)))
+                clauses = set(map(lambda child: Or(child).simplify(), product(*cnf_children)))
                 self = And(clauses)
             else:
                 self = self.simplify()
