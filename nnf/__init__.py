@@ -554,7 +554,7 @@ class NNF(metaclass=abc.ABCMeta):
 
         return neg(self)
 
-    def _to_iterable(self, cls) -> None:
+    def _iterable(self, cls) -> None:
         """ Adds magic methods to nnf.Var to make it iterable for CNF conversion """
         def __iter__(self):
             return iter({self})
@@ -569,12 +569,12 @@ class NNF(metaclass=abc.ABCMeta):
         setattr(cls, '__next__', __next__)
         setattr(cls, '__len__', __len__)
     
-    @memoize
     def flatten(self):
-        """ Simplifies clauses without removing variables """
+        """ Simplifies a clause without removing variables """
         # TODO: Add cases for simplification, like "(a & b) | b -> b"
-
-        def _flatten(node: NNF) -> NNF:
+        
+        @memoize
+        def _flatten(node: NNF) -> 'NNF':
             if isinstance(node, Var):
                 return node
             new_children = set()
@@ -586,8 +586,6 @@ class NNF(metaclass=abc.ABCMeta):
                         new_children.add(child)
                 if len(new_children) == 0:
                     return false
-                elif len(new_children) == 1:
-                    return list(new_children)[0]
                 return Or(new_children)
             elif isinstance(node, And):
                 for child in map(_flatten, node.children):
@@ -597,64 +595,50 @@ class NNF(metaclass=abc.ABCMeta):
                         new_children.add(child)
                 if len(new_children) == 0:
                     return true
-                elif len(new_children) == 1:
-                    return list(new_children)[0]
                 return And(new_children)
             else:
                 raise TypeError(node)
 
         return _flatten(self)
 
-
-    def distribute_or(self, child, other) -> 'NNF':
-        ''' Distribute Ors over Ands between two given nodes '''
-        from itertools import product
-        from functools import reduce
-
+    def distribute_or(self, child, other) -> set:
+        ''' Distribute Ors over Ands between two pairwise nodes '''
         if isinstance(child, Var) and isinstance(other, Var):
             return
-
-        child, other = child.flatten(), other.flatten()
-
-        if isinstance(child, Or):
-            clause = set(map(lambda c: Or(c), product({child}, other)))
-        elif isinstance(other, Or):
-            clause = set(map(lambda c: Or(c), product(child, {other})))
-        else:
-            clause = set(map(lambda c: Or(c), product(child, other)))
-            for c in clause:
-                c = reduce(self.distribute_or, c)
+        clause = set(map(lambda c: Or(c), itertools.product(child, other)))
+        for c in clause:
+            c = functools.reduce(self.distribute_or, c)
         return clause
         
-
-
     def to_CNF_naive(self) -> 'And[Or[Var]]':
         """ Convert given NNF to naive CNF with no additional variables """
-        from itertools import product
-        from functools import reduce
-
-        # add magic methods to class Var to make it iterable
-        self._to_iterable(Var)
-
-        if isinstance(self, Var):
-            return And({Or({self})})
         
-        assert isinstance(self, Internal)
+        def _naive(node: NNF):
+            # add magic methods to class Var to make it iterable
+            node._iterable(Var)
 
-        cnf_children = {c.to_CNF_naive() for c in self.children}
+            if isinstance(node, Var):
+                return And({Or({node})})
+            
+            assert isinstance(node, Internal)
 
-        if isinstance(self, Or):
-            if any(isinstance(child, And) for child in cnf_children):
-                clauses = reduce(self.distribute_or, cnf_children)
-                self = And(clauses)
-            return self.flatten()
+            cnf_children = {_naive(child) for child in node.children}
 
+            if isinstance(node, Or):
+                if any(isinstance(child, And) for child in cnf_children):
+                    clauses = functools.reduce(node.distribute_or, cnf_children)
+                    clauses = {child.flatten() for child in clauses}
+                    return And(clauses)
+                return node.flatten()
 
-        elif isinstance(self, And):
-            return And(cnf_children).flatten()
+            elif isinstance(node, And):
+                return And(cnf_children).flatten()
+            
+            else:
+                raise TypeError(node)
         
-        else:
-            raise TypeError(self)
+        cnf = _naive(self)
+        return cnf if isinstance(cnf, And) else And({cnf})
 
     def to_CNF(self, naive=False) -> 'And[Or[Var]]':
         """Compile theory to a semantically equivalent CNF formula."""
